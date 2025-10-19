@@ -38,23 +38,23 @@ def get_aqi_bucket(aqi):
 # ------------------------------
 # Load or Train Model
 # Load Model with Caching
-# ------------------------------
-@st.cache_resource
-def load_objects():
-    """Load model, scaler, imputer once and cache them."""
-    try:
-        model = joblib.load(MODEL_PATH)
-        scaler = joblib.load(SCALER_PATH)
-        imputer = joblib.load(IMPUTER_PATH)
-        if model and scaler and imputer:
-            return model, scaler, imputer
-        else:
-            return None, None, None
-    except FileNotFoundError:
-        return None, None, None
-    except Exception as e:
-        st.error(f"An unexpected error occurred during model loading: {e}")
-        return None, None, None
+# # ------------------------------
+# @st.cache_resource
+# def load_objects():
+#     """Load model, scaler, imputer once and cache them."""
+#     try:
+#         model = joblib.load(MODEL_PATH)
+#         scaler = joblib.load(SCALER_PATH)
+#         imputer = joblib.load(IMPUTER_PATH)
+#         if model and scaler and imputer:
+#             return model, scaler, imputer
+#         else:
+#             return None, None, None
+#     except FileNotFoundError:
+#         return None, None, None
+#     except Exception as e:
+#         st.error(f"An unexpected error occurred during model loading: {e}")
+#         return None, None, None
 
 # ------------------------------
 def train_model(df):
