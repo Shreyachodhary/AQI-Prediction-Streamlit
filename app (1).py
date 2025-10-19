@@ -36,7 +36,7 @@ def get_aqi_bucket(aqi):
         return "Severe"
 
 # ------------------------------
-# Load Model with Caching (The key change!)
+# Load Model with Caching
 # ------------------------------
 @st.cache_resource
 def load_objects():
@@ -59,9 +59,8 @@ def load_objects():
         return None, None, None
 
 # ------------------------------
-# Model Training (Only runs if a user explicitly clicks 'Train Model')
+# Model Training
 # ------------------------------
-# You should NOT cache this function, as it needs to run every time the user trains.
 def train_model(df):
     """Train linear regression on the dataset and save preprocessing objects"""
     X = df[FEATURES]
@@ -76,8 +75,6 @@ def train_model(df):
     model = LinearRegression()
     model.fit(X_scaled, y)
 
-    # Note: These files are saved in the temporary container storage.
-    # To persist them, you must commit them to GitHub after training locally.
     joblib.dump(model, MODEL_PATH)
     joblib.dump(scaler, SCALER_PATH)
     joblib.dump(imputer, IMPUTER_PATH)
@@ -87,7 +84,7 @@ def train_model(df):
 # ------------------------------
 # Model Handling
 # ------------------------------
-# The cache decorator ensures load_objects() only runs once per app deployment.
+# This line runs once per app deployment due to @st.cache_resource
 model, scaler, imputer = load_objects()
 
 uploaded_file = st.sidebar.file_uploader("📂 Upload your training CSV (must contain AQI + 8 features)", type=['csv'])
@@ -98,26 +95,52 @@ if uploaded_file:
     if missing:
         st.sidebar.error(f"Missing columns in file: {missing}")
     else:
-        # IMPORTANT: The model will only be saved in the temporary deployment environment.
-        # To truly persist it, you need to train locally and upload the .pkl files to GitHub.
         if st.sidebar.button("Train Model (Temporary)"):
             with st.spinner("Training model..."):
+                # Global variables are updated here
                 model, scaler, imputer = train_model(df)
             st.sidebar.success("✅ Model trained and saved successfully in this session!")
-            # Manually clear the resource cache to force the new model to be loaded
             st.cache_resource.clear() 
-            st.rerun() # Rerun the app to reload with the new objects
+            st.rerun() 
 
 # ------------------------------
 # Prediction Section
 # ------------------------------
-# ... (rest of the prediction code remains the same)
-# ...
+st.subheader("🔮 Enter pollutant values to predict AQI")
+
+# Input fields in two columns
+col1, col2 = st.columns(2)
+inputs = {}
+for i, feat in enumerate(FEATURES):
+    col = col1 if i < len(FEATURES)//2 else col2
+    inputs[feat] = col.number_input(f"{feat}", min_value=0.0, format="%.3f")
+
+# Line 116: The block starts here.
 if st.button("Predict AQI"):
-    # ... (prediction logic)
-# ... (prediction logic)
+    if model is None:
+        st.error("⚠️ Please train the model first by uploading your dataset (or ensure .pkl files are in GitHub).")
+    else:
+        # Prediction Logic (Indented under 'else')
+        df_input = pd.DataFrame([inputs])
+        
+        # Ensure all required preprocessing objects are available before transforming
+        if imputer is not None and scaler is not None:
+            try:
+                df_imputed = imputer.transform(df_input)
+                df_scaled = scaler.transform(df_imputed)
+                pred = model.predict(df_scaled)[0]
+                bucket = get_aqi_bucket(pred)
+
+                st.success(f"### 🌎 Predicted AQI: {pred:.2f}")
+                st.info(f"### Category: {bucket}")
+            except Exception as e:
+                st.error(f"Prediction failed. Ensure your model objects were saved correctly. Error: {e}")
+        else:
+            st.error("⚠️ Preprocessing objects (imputer/scaler) are missing. Please train the model first.")
+
 # ------------------------------
-# Footer
+# Footer (Zero Indentation Required)
 # ------------------------------
-st.write("---")
+# Line 122: This line MUST start at the far left (zero indentation).
+st.write("---") 
 st.caption("Developed by Shreya 🌸 | Linear Regression AQI Predictor | Streamlit App")
