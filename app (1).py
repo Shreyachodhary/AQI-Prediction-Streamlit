@@ -36,7 +36,7 @@ def get_aqi_bucket(aqi):
         return "Severe"
 
 # ------------------------------
-# Load or Train Model
+# Model Training (Unchanged)
 # ------------------------------
 def train_model(df):
     """Train linear regression on the dataset and save preprocessing objects"""
@@ -58,19 +58,29 @@ def train_model(df):
 
     return model, scaler, imputer
 
+# ------------------------------
+# Load Model with Caching (FIX APPLIED HERE)
+# ------------------------------
+@st.cache_resource # <--- THIS IS THE CRITICAL FIX
 def load_objects():
-    """Load model, scaler, imputer if available"""
+    """Load model, scaler, imputer once and cache them."""
     try:
         model = joblib.load(MODEL_PATH)
         scaler = joblib.load(SCALER_PATH)
         imputer = joblib.load(IMPUTER_PATH)
         return model, scaler, imputer
-    except:
+    except FileNotFoundError:
+        st.warning("⚠️ Model files not found. Please ensure PKL files are committed to GitHub or train the model below.")
+        return None, None, None
+    except Exception as e:
+        # Catch version warnings or corrupt files
+        st.error(f"An error occurred loading the model: {e}")
         return None, None, None
 
 # ------------------------------
 # Model Handling
 # ------------------------------
+# This line now only calls the function once per session due to the decorator.
 model, scaler, imputer = load_objects()
 
 uploaded_file = st.sidebar.file_uploader("📂 Upload your training CSV (must contain AQI + 8 features)", type=['csv'])
@@ -83,8 +93,11 @@ if uploaded_file:
     else:
         if st.sidebar.button("Train Model"):
             with st.spinner("Training model..."):
+                # If training occurs, clear the cache and rerun to load new model
                 model, scaler, imputer = train_model(df)
-            st.sidebar.success("✅ Model trained and saved successfully!")
+            st.sidebar.success("✅ Model trained and saved successfully in this session!")
+            st.cache_resource.clear()
+            st.rerun()
 
 # ------------------------------
 # Prediction Section
@@ -102,14 +115,21 @@ if st.button("Predict AQI"):
     if model is None:
         st.error("⚠️ Please train the model first by uploading your dataset.")
     else:
-        df_input = pd.DataFrame([inputs])
-        df_imputed = imputer.transform(df_input)
-        df_scaled = scaler.transform(df_imputed)
-        pred = model.predict(df_scaled)[0]
-        bucket = get_aqi_bucket(pred)
+        # Ensure preprocessing objects are available
+        if imputer is None or scaler is None:
+            st.error("⚠️ Preprocessing objects (imputer/scaler) are missing. Please train the model.")
+        else:
+            try:
+                df_input = pd.DataFrame([inputs])
+                df_imputed = imputer.transform(df_input)
+                df_scaled = scaler.transform(df_imputed)
+                pred = model.predict(df_scaled)[0]
+                bucket = get_aqi_bucket(pred)
 
-        st.success(f"### 🌎 Predicted AQI: {pred:.2f}")
-        st.info(f"### Category: {bucket}")
+                st.success(f"### 🌎 Predicted AQI: {pred:.2f}")
+                st.info(f"### Category: {bucket}")
+            except Exception as e:
+                st.error(f"Prediction failed. Please check your inputs or retrain the model. Error: {e}")
 
 # ------------------------------
 # Footer
