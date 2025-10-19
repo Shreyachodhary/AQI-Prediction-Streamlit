@@ -36,6 +36,7 @@ def get_aqi_bucket(aqi):
         return "Severe"
 
 # ------------------------------
+# Load or Train Model
 # Load Model with Caching
 # ------------------------------
 @st.cache_resource
@@ -45,21 +46,16 @@ def load_objects():
         model = joblib.load(MODEL_PATH)
         scaler = joblib.load(SCALER_PATH)
         imputer = joblib.load(IMPUTER_PATH)
-        # Check to ensure all objects were loaded successfully
         if model and scaler and imputer:
             return model, scaler, imputer
         else:
-            # If a file exists but is corrupt, handle it gracefully
             return None, None, None
     except FileNotFoundError:
-        # This is the expected state if the files haven't been uploaded to GitHub yet
         return None, None, None
     except Exception as e:
         st.error(f"An unexpected error occurred during model loading: {e}")
         return None, None, None
 
-# ------------------------------
-# Model Training
 # ------------------------------
 def train_model(df):
     """Train linear regression on the dataset and save preprocessing objects"""
@@ -81,10 +77,19 @@ def train_model(df):
 
     return model, scaler, imputer
 
+def load_objects():
+    """Load model, scaler, imputer if available"""
+    try:
+        model = joblib.load(MODEL_PATH)
+        scaler = joblib.load(SCALER_PATH)
+        imputer = joblib.load(IMPUTER_PATH)
+        return model, scaler, imputer
+    except:
+        return None, None, None
+
 # ------------------------------
 # Model Handling
 # ------------------------------
-# This line runs once per app deployment due to @st.cache_resource
 model, scaler, imputer = load_objects()
 
 uploaded_file = st.sidebar.file_uploader("📂 Upload your training CSV (must contain AQI + 8 features)", type=['csv'])
@@ -95,13 +100,10 @@ if uploaded_file:
     if missing:
         st.sidebar.error(f"Missing columns in file: {missing}")
     else:
-        if st.sidebar.button("Train Model (Temporary)"):
+        if st.sidebar.button("Train Model"):
             with st.spinner("Training model..."):
-                # Global variables are updated here
                 model, scaler, imputer = train_model(df)
-            st.sidebar.success("✅ Model trained and saved successfully in this session!")
-            st.cache_resource.clear() 
-            st.rerun() 
+            st.sidebar.success("✅ Model trained and saved successfully!")
 
 # ------------------------------
 # Prediction Section
@@ -115,32 +117,21 @@ for i, feat in enumerate(FEATURES):
     col = col1 if i < len(FEATURES)//2 else col2
     inputs[feat] = col.number_input(f"{feat}", min_value=0.0, format="%.3f")
 
-# Line 116: The block starts here.
 if st.button("Predict AQI"):
     if model is None:
-        st.error("⚠️ Please train the model first by uploading your dataset (or ensure .pkl files are in GitHub).")
+        st.error("⚠️ Please train the model first by uploading your dataset.")
     else:
-        # Prediction Logic (Indented under 'else')
         df_input = pd.DataFrame([inputs])
-        
-        # Ensure all required preprocessing objects are available before transforming
-        if imputer is not None and scaler is not None:
-            try:
-                df_imputed = imputer.transform(df_input)
-                df_scaled = scaler.transform(df_imputed)
-                pred = model.predict(df_scaled)[0]
-                bucket = get_aqi_bucket(pred)
+        df_imputed = imputer.transform(df_input)
+        df_scaled = scaler.transform(df_imputed)
+        pred = model.predict(df_scaled)[0]
+        bucket = get_aqi_bucket(pred)
 
-                st.success(f"### 🌎 Predicted AQI: {pred:.2f}")
-                st.info(f"### Category: {bucket}")
-            except Exception as e:
-                st.error(f"Prediction failed. Ensure your model objects were saved correctly. Error: {e}")
-        else:
-            st.error("⚠️ Preprocessing objects (imputer/scaler) are missing. Please train the model first.")
+        st.success(f"### 🌎 Predicted AQI: {pred:.2f}")
+        st.info(f"### Category: {bucket}")
 
 # ------------------------------
-# Footer (Zero Indentation Required)
+# Footer
 # ------------------------------
-# Line 122: This line MUST start at the far left (zero indentation).
-st.write("---") 
+st.write("---")
 st.caption("Developed by Shreya 🌸 | Linear Regression AQI Predictor | Streamlit App")
