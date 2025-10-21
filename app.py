@@ -61,7 +61,7 @@ def train_model(df):
 # ------------------------------
 # Load Model with Caching (FIX APPLIED HERE)
 # ------------------------------
-@st.cache_resource # <--- THIS IS THE CRITICAL FIX
+@st.cache_resource(show_spinner=False)  # <--- THIS IS THE CRITICAL FIX
 def load_objects():
     """Load model, scaler, imputer once and cache them."""
     try:
