@@ -16,7 +16,7 @@ IMPUTER_PATH = "linear_imputer.pkl"
 
 st.set_page_config(page_title="AQI Predictor", page_icon="🌫️", layout="wide")
 st.title("🌫️ Air Quality Index (AQI) Predictor")
-st.write("Enter pollutant concentrations to predict AQI and its category using your trained Linear Regression model.")
+st.write("Enter pollutant concentrations to predict AQI and its category using a trained Linear Regression model.")
 
 # ------------------------------
 # AQI Bucket Function
@@ -36,10 +36,30 @@ def get_aqi_bucket(aqi):
         return "Severe"
 
 # ------------------------------
-# Model Training (Unchanged)
+# Model Training Function
 # ------------------------------
 def train_model(df):
-    """Train linear regression on the dataset and save preprocessing objects"""
+    """Train a Linear Regression model on the dataset and save preprocessing objects."""
+    # Ensure columns exist
+    missing = [col for col in FEATURES + ['AQI'] if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    # Keep only needed columns
+    df = df[FEATURES + ['AQI']].copy()
+
+    # Convert all columns to numeric (handles strings like 'NA' or '–')
+    for col in FEATURES + ['AQI']:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Drop rows with missing AQI (target)
+    df = df.dropna(subset=['AQI'])
+
+    # If no valid data left, raise an error
+    if df.empty:
+        raise ValueError("No valid rows found after cleaning. Check your dataset.")
+
+    # Separate features and target
     X = df[FEATURES]
     y = df['AQI']
 
@@ -59,9 +79,9 @@ def train_model(df):
     return model, scaler, imputer
 
 # ------------------------------
-# Load Model with Caching (FIX APPLIED HERE)
+# Load Model + Cache
 # ------------------------------
-@st.cache_resource(show_spinner=False)  # <--- THIS IS THE CRITICAL FIX
+@st.cache_resource(show_spinner=False)
 def load_objects():
     """Load model, scaler, imputer once and cache them."""
     try:
@@ -70,19 +90,20 @@ def load_objects():
         imputer = joblib.load(IMPUTER_PATH)
         return model, scaler, imputer
     except FileNotFoundError:
-        st.warning("⚠️ Model files not found. Please ensure PKL files are committed to GitHub or train the model below.")
+        st.warning("⚠️ Model files not found. Please upload and train below.")
         return None, None, None
     except Exception as e:
-        # Catch version warnings or corrupt files
-        st.error(f"An error occurred loading the model: {e}")
+        st.error(f"Error loading model: {e}")
         return None, None, None
 
 # ------------------------------
-# Model Handling
+# Load saved model if available
 # ------------------------------
-# This line now only calls the function once per session due to the decorator.
 model, scaler, imputer = load_objects()
 
+# ------------------------------
+# Sidebar: Upload & Train
+# ------------------------------
 uploaded_file = st.sidebar.file_uploader("📂 Upload your training CSV (must contain AQI + 8 features)", type=['csv'])
 
 if uploaded_file:
@@ -93,9 +114,8 @@ if uploaded_file:
     else:
         if st.sidebar.button("Train Model"):
             with st.spinner("Training model..."):
-                # If training occurs, clear the cache and rerun to load new model
                 model, scaler, imputer = train_model(df)
-            st.sidebar.success("✅ Model trained and saved successfully in this session!")
+            st.sidebar.success("✅ Model trained and saved successfully!")
             st.cache_resource.clear()
             st.rerun()
 
@@ -104,32 +124,28 @@ if uploaded_file:
 # ------------------------------
 st.subheader("🔮 Enter pollutant values to predict AQI")
 
-# Input fields in two columns
 col1, col2 = st.columns(2)
 inputs = {}
+
 for i, feat in enumerate(FEATURES):
     col = col1 if i < len(FEATURES)//2 else col2
     inputs[feat] = col.number_input(f"{feat}", min_value=0.0, format="%.3f")
 
 if st.button("Predict AQI"):
     if model is None:
-        st.error("⚠️ Please train the model first by uploading your dataset.")
+        st.error("⚠️ Please train the model first or ensure PKL files exist in repo.")
     else:
-        # Ensure preprocessing objects are available
-        if imputer is None or scaler is None:
-            st.error("⚠️ Preprocessing objects (imputer/scaler) are missing. Please train the model.")
-        else:
-            try:
-                df_input = pd.DataFrame([inputs])
-                df_imputed = imputer.transform(df_input)
-                df_scaled = scaler.transform(df_imputed)
-                pred = model.predict(df_scaled)[0]
-                bucket = get_aqi_bucket(pred)
+        try:
+            df_input = pd.DataFrame([inputs])
+            df_imputed = imputer.transform(df_input)
+            df_scaled = scaler.transform(df_imputed)
+            pred = model.predict(df_scaled)[0]
+            bucket = get_aqi_bucket(pred)
 
-                st.success(f"### 🌎 Predicted AQI: {pred:.2f}")
-                st.info(f"### Category: {bucket}")
-            except Exception as e:
-                st.error(f"Prediction failed. Please check your inputs or retrain the model. Error: {e}")
+            st.success(f"### 🌎 Predicted AQI: {pred:.2f}")
+            st.info(f"### Category: {bucket}")
+        except Exception as e:
+            st.error(f"Prediction failed. Error: {e}")
 
 # ------------------------------
 # Footer
